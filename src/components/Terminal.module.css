@@ -98,6 +98,11 @@
   background: rgba(124, 110, 248, 0.25);
 }
 
+.btnCodex:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .btnSecondary {
   background: var(--bg-elevated);
   color: var(--text-secondary);

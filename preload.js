@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
   ptyWrite: (data) => ipcRenderer.send('pty:write', data),
   ptyResize: (cols, rows) => ipcRenderer.send('pty:resize', cols, rows),
   ptyKill: () => ipcRenderer.invoke('pty:kill'),
+  codexEnsure: () => ipcRenderer.invoke('codex:ensure'),
   onPtyData: (cb) => ipcRenderer.on('pty:data', (_, data) => cb(data)),
   onPtyExit: (cb) => ipcRenderer.on('pty:exit', cb),
   offPtyData: () => ipcRenderer.removeAllListeners('pty:data'),

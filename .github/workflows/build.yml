@@ -16,8 +16,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            platform: mac
+          - os: macos-14
+            platform: mac-arm64
+            mac_arch: arm64
+          - os: macos-13
+            platform: mac-x64
+            mac_arch: x64
           - os: windows-latest
             platform: win
           - os: ubuntu-latest
@@ -50,8 +54,8 @@ jobs:
         run: npm ci --include=optional
 
       - name: App bauen (macOS)
-        if: matrix.os == 'macos-latest'
-        run: npx vite build && npx electron-builder --mac dmg --publish never
+        if: startsWith(matrix.platform, 'mac-')
+        run: npx vite build && npx electron-builder --mac dmg --${{ matrix.mac_arch }} --publish never
 
       - name: App bauen (Windows)
         if: matrix.os == 'windows-latest'

@@ -8,6 +8,7 @@ export default function Terminal({ folder, onOutput }) {
   const containerRef = useRef(null)
   const [isRunning, setIsRunning] = useState(false)
   const [isReady, setIsReady] = useState(false)
+  const [codexAvailable, setCodexAvailable] = useState(false)
   const outputBuffer = useRef('')
   const isRunningRef = useRef(false)
   const initGenerationRef = useRef(0)
@@ -143,6 +144,7 @@ export default function Terminal({ folder, onOutput }) {
     window.api.onPtyExit(() => {
       isRunningRef.current = false
       setIsRunning(false)
+      setCodexAvailable(false)
       xtermRef.current?.writeln('\r\n\x1b[38;5;245m[Shell beendet]\x1b[0m')
       window.api.offPtyData()
       window.api.offPtyExit()
@@ -160,6 +162,7 @@ export default function Terminal({ folder, onOutput }) {
 
     isRunningRef.current = true
     setIsRunning(true)
+    setCodexAvailable(false)
 
     // Fit and sync size
     fitAddonRef.current?.fit()
@@ -170,13 +173,33 @@ export default function Terminal({ folder, onOutput }) {
     window.api.ptyWrite('\r')
 
     // Send codex launch hint
-    xtermRef.current?.writeln('\x1b[38;5;245m# Tipp: gib "codex" ein um Codex AI zu starten\x1b[0m')
+    xtermRef.current?.writeln('\x1b[38;5;245m# Prüfe Codex CLI…\x1b[0m')
+    const codexResult = await window.api.codexEnsure()
+    if (codexResult?.ok) {
+      setCodexAvailable(true)
+      if (codexResult.status === 'installed') {
+        xtermRef.current?.writeln('\x1b[32m# Codex CLI wurde installiert\x1b[0m')
+      } else {
+        xtermRef.current?.writeln('\x1b[38;5;245m# Codex CLI ist verfügbar\x1b[0m')
+      }
+      xtermRef.current?.writeln('\x1b[38;5;245m# Tipp: gib "codex" ein um Codex AI zu starten\x1b[0m')
+    } else {
+      setCodexAvailable(false)
+      xtermRef.current?.writeln(`\x1b[31m# Codex CLI nicht bereit: ${codexResult?.message || 'Unbekannter Fehler'}\x1b[0m`)
+      if (codexResult?.status === 'missing_node') {
+        xtermRef.current?.writeln('\x1b[38;5;245m# Installiere Node.js und starte das Terminal neu.\x1b[0m')
+      }
+      if (codexResult?.status === 'missing_npm') {
+        xtermRef.current?.writeln('\x1b[38;5;245m# Installiere Node.js (inkl. npm) und starte das Terminal neu.\x1b[0m')
+      }
+    }
   }, [folder, isRunning, onOutput, focusTerminal])
 
   const stopTerminal = useCallback(async () => {
     await window.api.ptyKill()
     isRunningRef.current = false
     setIsRunning(false)
+    setCodexAvailable(false)
     window.api.offPtyData()
     window.api.offPtyExit()
   }, [])
@@ -188,9 +211,9 @@ export default function Terminal({ folder, onOutput }) {
   }, [focusTerminal])
 
   const runCodex = useCallback(() => {
-    if (!isRunning) return
+    if (!isRunning || !codexAvailable) return
     window.api.ptyWrite('codex\r')
-  }, [isRunning])
+  }, [isRunning, codexAvailable])
 
   return (
     <div className={styles.wrapper}>
@@ -216,6 +239,7 @@ export default function Terminal({ folder, onOutput }) {
               <button
                 className={`${styles.btn} ${styles.btnCodex}`}
                 onClick={runCodex}
+                disabled={!codexAvailable}
               >
                 🤖 Codex starten
               </button>

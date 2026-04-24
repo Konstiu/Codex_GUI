@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
+const { spawn } = require('child_process')
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -183,6 +184,11 @@ ipcMain.handle('git:restoreCommit', async (_, folderPath, commitHash) => {
 // ─── IPC: Terminal (PTY) ─────────────────────────────────────────────────────
 
 let ptyProcess = null
+const CODEX_NPM_PREFIX = path.join(os.homedir(), '.codex-gui', 'npm-global')
+const CODEX_LOCAL_BIN_DIR =
+  process.platform === 'win32'
+    ? path.join(CODEX_NPM_PREFIX, 'node_modules', '.bin')
+    : path.join(CODEX_NPM_PREFIX, 'bin')
 
 function resolveShell() {
   if (process.platform === 'win32') return 'cmd.exe'
@@ -196,44 +202,182 @@ function resolveShell() {
   return existing || '/bin/zsh'
 }
 
+function resolveShellCandidates() {
+  if (process.platform === 'win32') return ['cmd.exe']
+  if (process.platform === 'linux') return [fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh']
+
+  return [process.env.SHELL, '/bin/zsh', '/bin/bash', '/bin/sh']
+    .filter(Boolean)
+    .filter((candidate, index, arr) => arr.indexOf(candidate) === index)
+    .filter(candidate => fs.existsSync(candidate))
+}
+
 function buildPtyEnv() {
   const defaultPath =
     process.platform === 'darwin'
       ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
-      : '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      : '/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
   return {
     ...process.env,
-    PATH: process.env.PATH || defaultPath,
+    PATH: [CODEX_LOCAL_BIN_DIR, process.env.PATH || defaultPath].filter(Boolean).join(path.delimiter),
     TERM: process.env.TERM || 'xterm-256color',
     COLORTERM: process.env.COLORTERM || 'truecolor',
   }
 }
 
+function commandExists(command, env = process.env) {
+  const pathValue = env.PATH || ''
+  const pathDirs = pathValue.split(path.delimiter).filter(Boolean)
+
+  if (process.platform === 'win32') {
+    const pathExtRaw = env.PATHEXT || '.EXE;.CMD;.BAT;.COM'
+    const extensions = pathExtRaw.split(';').map(ext => ext.toLowerCase())
+    for (const dir of pathDirs) {
+      for (const ext of extensions) {
+        const candidate = path.join(dir, `${command}${ext}`)
+        if (fs.existsSync(candidate)) return true
+      }
+    }
+    return false
+  }
+
+  for (const dir of pathDirs) {
+    const candidate = path.join(dir, command)
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK)
+      return true
+    } catch {
+      // keep scanning PATH
+    }
+  }
+  return false
+}
+
+function runCommand(bin, args, options = {}) {
+  return new Promise(resolve => {
+    const child = spawn(bin, args, {
+      cwd: options.cwd || os.homedir(),
+      env: options.env || process.env,
+      shell: false,
+    })
+
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', data => {
+      stdout += String(data)
+    })
+    child.stderr?.on('data', data => {
+      stderr += String(data)
+    })
+    child.on('error', error => {
+      resolve({ code: -1, stdout, stderr, error: error.message })
+    })
+    child.on('close', code => {
+      resolve({ code: code ?? 0, stdout, stderr })
+    })
+  })
+}
+
+async function ensureCodexInstalled() {
+  const env = buildPtyEnv()
+  if (commandExists('codex', env)) {
+    return { ok: true, status: 'ready', message: 'codex gefunden' }
+  }
+
+  if (!commandExists('node', env)) {
+    return {
+      ok: false,
+      status: 'missing_node',
+      message: 'node wurde nicht gefunden. Installiere zuerst Node.js.',
+    }
+  }
+
+  if (!commandExists('npm', env)) {
+    return {
+      ok: false,
+      status: 'missing_npm',
+      message: 'npm wurde nicht gefunden. Installiere zuerst Node.js + npm.',
+    }
+  }
+
+  fs.mkdirSync(CODEX_NPM_PREFIX, { recursive: true })
+  const installResult = await runCommand(
+    'npm',
+    ['install', '-g', '@openai/codex', '--prefix', CODEX_NPM_PREFIX],
+    { env, cwd: os.homedir() }
+  )
+
+  if (installResult.code !== 0) {
+    return {
+      ok: false,
+      status: 'install_failed',
+      message: installResult.stderr.trim() || installResult.stdout.trim() || 'Codex Installation fehlgeschlagen',
+    }
+  }
+
+  const envAfterInstall = buildPtyEnv()
+  if (!commandExists('codex', envAfterInstall)) {
+    return {
+      ok: false,
+      status: 'install_failed',
+      message: 'Installation abgeschlossen, aber codex ist nicht im PATH.',
+    }
+  }
+
+  return { ok: true, status: 'installed', message: 'codex wurde installiert' }
+}
+
+ipcMain.handle('codex:ensure', async () => {
+  try {
+    return await ensureCodexInstalled()
+  } catch (e) {
+    return { ok: false, status: 'error', message: e?.message || 'Unbekannter Fehler' }
+  }
+})
+
 ipcMain.handle('pty:start', async (event, folderPath) => {
   try {
     const pty = require('node-pty')
-    const shell = resolveShell()
+    const shells = resolveShellCandidates()
+    const shell = shells[0] || resolveShell()
     const shellArgs =
       process.platform === 'win32'
         ? ['/k']
         : process.platform === 'linux'
           ? ['--noprofile', '--norc', '-i']
           : ['-i']
-    const safeCwd = folderPath && fs.existsSync(folderPath) ? folderPath : os.homedir()
+    const cwdCandidates = [folderPath, os.homedir(), '/tmp']
+      .filter(Boolean)
+      .filter((candidate, index, arr) => arr.indexOf(candidate) === index)
+      .filter(candidate => fs.existsSync(candidate))
 
     if (ptyProcess) {
       ptyProcess.kill()
       ptyProcess = null
     }
 
-    ptyProcess = pty.spawn(shell, shellArgs, {
-      name: 'xterm-256color',
-      cols: 100,
-      rows: 30,
-      cwd: safeCwd,
-      env: buildPtyEnv(),
-    })
+    let spawnError = null
+    for (const candidateShell of shells.length ? shells : [shell]) {
+      for (const candidateCwd of cwdCandidates.length ? cwdCandidates : [os.homedir()]) {
+        try {
+          ptyProcess = pty.spawn(candidateShell, shellArgs, {
+            name: 'xterm-256color',
+            cols: 100,
+            rows: 30,
+            cwd: candidateCwd,
+            env: buildPtyEnv(),
+          })
+          spawnError = null
+          break
+        } catch (err) {
+          spawnError = err
+        }
+      }
+      if (ptyProcess) break
+    }
+
+    if (!ptyProcess) throw spawnError || new Error('Unable to start shell')
 
     ptyProcess.onData(data => {
       event.sender.send('pty:data', data)
@@ -261,7 +405,7 @@ ipcMain.handle('pty:start', async (event, folderPath) => {
 
     if (message.includes('posix_spawnp failed')) {
       return {
-        error: `${message}\n\nShell: ${resolveShell()}\nTip: Ensure /bin/zsh exists and retry.`,
+        error: `${message}\n\nTried shells: ${resolveShellCandidates().join(', ') || resolveShell()}\nTip: Try opening a different folder and retry.`,
       }
     }
 
