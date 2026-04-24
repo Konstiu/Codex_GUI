@@ -69,6 +69,17 @@ export default function App() {
     }
   }, [folder, refreshDiff, showStatus])
 
+  const handleRestoreCommit = useCallback(async (commitHash) => {
+    if (!folder) return
+    const result = await window.api.gitRestoreCommit(folder, commitHash)
+    if (result.error) {
+      showStatus('error', 'Wiederherstellen fehlgeschlagen: ' + result.error)
+    } else {
+      showStatus('success', `Stand ${commitHash.slice(0, 7)} wiederhergestellt`)
+      await refreshDiff()
+    }
+  }, [folder, refreshDiff, showStatus])
+
   // Auto-refresh diff every 3 seconds when a folder is open
   useEffect(() => {
     if (!folder) return
@@ -109,6 +120,7 @@ export default function App() {
               selectedFile={selectedFile}
               onSnapshot={handleSnapshot}
               onRevert={handleRevert}
+              onRestoreCommit={handleRestoreCommit}
               folder={folder}
             />
           </div>

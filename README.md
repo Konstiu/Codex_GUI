@@ -29,6 +29,9 @@ npm install -g @openai/codex
 # Dependencies installieren
 npm install
 
+# Falls das eingebettete Terminal nicht startet (node-pty):
+npm run rebuild:pty
+
 # Im Entwicklungsmodus starten (Vite + Electron)
 npm run dev
 

@@ -144,7 +144,8 @@ ipcMain.handle('git:revert', async (_, folderPath) => {
   try {
     const simpleGit = require('simple-git')
     const git = simpleGit(folderPath)
-    await git.checkout(['.'])
+    await git.reset(['--hard', 'HEAD'])
+    await git.raw(['clean', '-fd'])
     return { success: true }
   } catch (e) {
     return { error: e.message }
@@ -162,6 +163,17 @@ ipcMain.handle('git:log', async (_, folderPath) => {
   }
 })
 
+ipcMain.handle('git:restoreCommit', async (_, folderPath, commitHash) => {
+  try {
+    const simpleGit = require('simple-git')
+    const git = simpleGit(folderPath)
+    await git.checkout([commitHash, '--', '.'])
+    return { success: true }
+  } catch (e) {
+    return { error: e.message }
+  }
+})
+
 // ─── IPC: Terminal (PTY) ─────────────────────────────────────────────────────
 
 let ptyProcess = null
@@ -169,19 +181,34 @@ let ptyProcess = null
 ipcMain.handle('pty:start', async (event, folderPath) => {
   try {
     const pty = require('node-pty')
-    const shell = process.platform === 'win32' ? 'cmd.exe' : (process.env.SHELL || '/bin/bash')
+    const shell =
+      process.platform === 'win32'
+        ? 'cmd.exe'
+        : process.platform === 'linux'
+          ? '/bin/bash'
+          : (process.env.SHELL || '/bin/bash')
+    const shellArgs =
+      process.platform === 'win32'
+        ? ['/k']
+        : process.platform === 'linux'
+          ? ['--noprofile', '--norc', '-i']
+          : ['-i']
 
     if (ptyProcess) {
       ptyProcess.kill()
       ptyProcess = null
     }
 
-    ptyProcess = pty.spawn(shell, [], {
+    ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
       cols: 100,
       rows: 30,
       cwd: folderPath,
-      env: process.env,
+      env: {
+        ...process.env,
+        TERM: process.env.TERM || 'xterm-256color',
+        COLORTERM: process.env.COLORTERM || 'truecolor',
+      },
     })
 
     ptyProcess.onData(data => {
@@ -195,15 +222,28 @@ ipcMain.handle('pty:start', async (event, folderPath) => {
 
     return { success: true }
   } catch (e) {
-    return { error: e.message }
+    const message = e?.message || 'Unknown PTY error'
+    const isNativeModuleIssue =
+      message.includes('NODE_MODULE_VERSION') ||
+      message.includes('was compiled against a different Node.js version') ||
+      message.includes('Cannot find module') ||
+      message.includes('invalid ELF header')
+
+    if (isNativeModuleIssue) {
+      return {
+        error: `${message}\n\nTry running: npm run rebuild:pty`,
+      }
+    }
+
+    return { error: message }
   }
 })
 
-ipcMain.handle('pty:write', async (_, data) => {
+ipcMain.on('pty:write', (_, data) => {
   if (ptyProcess) ptyProcess.write(data)
 })
 
-ipcMain.handle('pty:resize', async (_, cols, rows) => {
+ipcMain.on('pty:resize', (_, cols, rows) => {
   if (ptyProcess) ptyProcess.resize(cols, rows)
 })
 

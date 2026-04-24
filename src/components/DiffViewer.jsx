@@ -75,7 +75,7 @@ function FileDiff({ file, defaultOpen = true }) {
   )
 }
 
-export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, folder }) {
+export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, onRestoreCommit, folder }) {
   const [snapshotMsg, setSnapshotMsg] = useState('')
   const [showSnapshotInput, setShowSnapshotInput] = useState(false)
   const [activeTab, setActiveTab] = useState('changes') // 'changes' | 'history'
@@ -98,6 +98,11 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, f
     setHistory(result.commits || [])
     setLoadingHistory(false)
   }, [folder])
+
+  const handleRestoreCommit = useCallback(async (hash) => {
+    await onRestoreCommit(hash)
+    await loadHistory()
+  }, [onRestoreCommit, loadHistory])
 
   return (
     <div className={styles.viewer}>
@@ -211,6 +216,13 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, f
                       <span className={styles.commitHash}>{commit.hash.slice(0, 7)}</span>
                     </div>
                   </div>
+                  <button
+                    className={`${styles.actionBtn} ${styles.actionRestore}`}
+                    onClick={() => handleRestoreCommit(commit.hash)}
+                    title={`Stand ${commit.hash.slice(0, 7)} wiederherstellen`}
+                  >
+                    Zu diesem Stand
+                  </button>
                 </div>
               ))
             )}

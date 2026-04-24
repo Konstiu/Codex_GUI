@@ -9,17 +9,26 @@ export default function Terminal({ folder, onOutput }) {
   const [isRunning, setIsRunning] = useState(false)
   const [isReady, setIsReady] = useState(false)
   const outputBuffer = useRef('')
+  const isRunningRef = useRef(false)
+  const initGenerationRef = useRef(0)
+  const focusTerminal = useCallback(() => {
+    xtermRef.current?.focus()
+    termRef.current?.querySelector('textarea')?.focus()
+  }, [])
 
   // Initialize xterm.js
   useEffect(() => {
     let term
     let fitAddon
+    let disposed = false
+    const generation = ++initGenerationRef.current
 
     const init = async () => {
-      const { Terminal: XTerm } = await import('xterm')
+      const { Terminal: XTerm } = await import('@xterm/xterm')
       const { FitAddon } = await import('@xterm/addon-fit')
       const { WebLinksAddon } = await import('@xterm/addon-web-links')
-      await import('xterm/css/xterm.css')
+      await import('@xterm/xterm/css/xterm.css')
+      if (disposed || generation !== initGenerationRef.current || !termRef.current) return
 
       term = new XTerm({
         fontFamily: '"JetBrains Mono", "Fira Code", monospace',
@@ -53,6 +62,7 @@ export default function Terminal({ folder, onOutput }) {
         cursorBlink: true,
         cursorStyle: 'bar',
         convertEol: true,
+        disableStdin: false,
       })
 
       fitAddon = new FitAddon()
@@ -61,10 +71,23 @@ export default function Terminal({ folder, onOutput }) {
 
       term.open(termRef.current)
       fitAddon.fit()
+      focusTerminal()
+      if (disposed || generation !== initGenerationRef.current) {
+        term.dispose()
+        return
+      }
 
       xtermRef.current = term
       fitAddonRef.current = fitAddon
       setIsReady(true)
+
+      // Keep a single keyboard handler for the terminal lifetime.
+      // `onKey` is more reliable than `onData` for some Linux/Electron setups.
+      term.onKey(({ key }) => {
+        if (!isRunningRef.current) return
+        window.api.ptyWrite(key)
+        xtermRef.current?.scrollToBottom()
+      })
 
       term.writeln('\x1b[38;5;99m╔═══════════════════════════════════════╗\x1b[0m')
       term.writeln('\x1b[38;5;99m║         Codex GUI — Terminal          ║\x1b[0m')
@@ -78,9 +101,10 @@ export default function Terminal({ folder, onOutput }) {
     init()
 
     return () => {
+      disposed = true
       if (term) term.dispose()
     }
-  }, [])
+  }, [focusTerminal])
 
   // Resize observer
   useEffect(() => {
@@ -99,16 +123,12 @@ export default function Terminal({ folder, onOutput }) {
   const startTerminal = useCallback(async () => {
     if (!folder || isRunning) return
 
-    const result = await window.api.ptyStart(folder)
-    if (result.error) {
-      xtermRef.current?.writeln(`\x1b[31mFehler: ${result.error}\x1b[0m`)
-      return
-    }
-
-    setIsRunning(true)
-
+    // Register listeners before spawning PTY to avoid missing early events.
+    window.api.offPtyData()
+    window.api.offPtyExit()
     window.api.onPtyData(data => {
       xtermRef.current?.write(data)
+      xtermRef.current?.scrollToBottom()
       outputBuffer.current += data
       // Notify parent after quiet period
       clearTimeout(window._diffTimeout)
@@ -121,28 +141,41 @@ export default function Terminal({ folder, onOutput }) {
     })
 
     window.api.onPtyExit(() => {
+      isRunningRef.current = false
       setIsRunning(false)
       xtermRef.current?.writeln('\r\n\x1b[38;5;245m[Shell beendet]\x1b[0m')
       window.api.offPtyData()
       window.api.offPtyExit()
     })
 
-    // Connect keyboard input
-    xtermRef.current?.onData(data => {
-      window.api.ptyWrite(data)
-    })
+    const result = await window.api.ptyStart(folder)
+    if (result.error) {
+      isRunningRef.current = false
+      setIsRunning(false)
+      xtermRef.current?.writeln(`\x1b[31mFehler: ${result.error}\x1b[0m`)
+      window.api.offPtyData()
+      window.api.offPtyExit()
+      return
+    }
+
+    isRunningRef.current = true
+    setIsRunning(true)
 
     // Fit and sync size
     fitAddonRef.current?.fit()
     const { cols, rows } = xtermRef.current
     window.api.ptyResize(cols, rows)
+    focusTerminal()
+    xtermRef.current?.scrollToBottom()
+    window.api.ptyWrite('\r')
 
     // Send codex launch hint
     xtermRef.current?.writeln('\x1b[38;5;245m# Tipp: gib "codex" ein um Codex AI zu starten\x1b[0m')
-  }, [folder, isRunning, onOutput])
+  }, [folder, isRunning, onOutput, focusTerminal])
 
   const stopTerminal = useCallback(async () => {
     await window.api.ptyKill()
+    isRunningRef.current = false
     setIsRunning(false)
     window.api.offPtyData()
     window.api.offPtyExit()
@@ -150,7 +183,9 @@ export default function Terminal({ folder, onOutput }) {
 
   const clearTerminal = useCallback(() => {
     xtermRef.current?.clear()
-  }, [])
+    xtermRef.current?.scrollToBottom()
+    focusTerminal()
+  }, [focusTerminal])
 
   const runCodex = useCallback(() => {
     if (!isRunning) return
@@ -202,7 +237,11 @@ export default function Terminal({ folder, onOutput }) {
       </div>
 
       <div ref={containerRef} className={styles.terminalContainer}>
-        <div ref={termRef} className={styles.terminal} />
+        <div
+          ref={termRef}
+          className={styles.terminal}
+          onClick={focusTerminal}
+        />
       </div>
     </div>
   )

@@ -14,11 +14,12 @@ contextBridge.exposeInMainWorld('api', {
   gitSnapshot: (folder, msg) => ipcRenderer.invoke('git:snapshot', folder, msg),
   gitRevert: (folder) => ipcRenderer.invoke('git:revert', folder),
   gitLog: (folder) => ipcRenderer.invoke('git:log', folder),
+  gitRestoreCommit: (folder, commitHash) => ipcRenderer.invoke('git:restoreCommit', folder, commitHash),
 
   // Terminal (PTY)
   ptyStart: (folder) => ipcRenderer.invoke('pty:start', folder),
-  ptyWrite: (data) => ipcRenderer.invoke('pty:write', data),
-  ptyResize: (cols, rows) => ipcRenderer.invoke('pty:resize', cols, rows),
+  ptyWrite: (data) => ipcRenderer.send('pty:write', data),
+  ptyResize: (cols, rows) => ipcRenderer.send('pty:resize', cols, rows),
   ptyKill: () => ipcRenderer.invoke('pty:kill'),
   onPtyData: (cb) => ipcRenderer.on('pty:data', (_, data) => cb(data)),
   onPtyExit: (cb) => ipcRenderer.on('pty:exit', cb),
