@@ -33,6 +33,9 @@
 		"appId": "com.codex-gui.app",
 		"productName": "Codex GUI",
 		"files": ["dist/**/*", "main.js", "preload.js"],
+		"asarUnpack": [
+			"node_modules/node-pty/**/*"
+		],
 		"mac": { "target": "dmg" },
 		"win": { "target": "nsis" },
 		"linux": { "target": "AppImage" }

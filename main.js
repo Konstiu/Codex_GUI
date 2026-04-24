@@ -226,6 +226,32 @@ function buildPtyEnv() {
   }
 }
 
+function buildMinimalPtyEnv(shellPath) {
+  const defaultPath =
+    process.platform === 'darwin'
+      ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+      : '/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+  let username = process.env.USER || process.env.LOGNAME || ''
+  try {
+    if (!username) username = os.userInfo().username
+  } catch {
+    // ignore and keep fallback
+  }
+
+  return {
+    PATH: [CODEX_LOCAL_BIN_DIR, process.env.PATH || defaultPath].filter(Boolean).join(path.delimiter),
+    HOME: os.homedir(),
+    SHELL: shellPath || resolveShell(),
+    USER: username,
+    LOGNAME: username,
+    TMPDIR: process.env.TMPDIR || '/tmp',
+    LANG: process.env.LANG || 'en_US.UTF-8',
+    TERM: process.env.TERM || 'xterm-256color',
+    COLORTERM: process.env.COLORTERM || 'truecolor',
+  }
+}
+
 function commandExists(command, env = process.env) {
   const pathValue = env.PATH || ''
   const pathDirs = pathValue.split(path.delimiter).filter(Boolean)
@@ -341,12 +367,12 @@ ipcMain.handle('pty:start', async (event, folderPath) => {
     const pty = require('node-pty')
     const shells = resolveShellCandidates()
     const shell = shells[0] || resolveShell()
-    const shellArgs =
+    const shellArgVariants =
       process.platform === 'win32'
-        ? ['/k']
+        ? [['/k']]
         : process.platform === 'linux'
-          ? ['--noprofile', '--norc', '-i']
-          : ['-i']
+          ? [['--noprofile', '--norc', '-i'], ['-i'], []]
+          : [['-il'], ['-i'], ['-l'], []]
     const cwdCandidates = [folderPath, os.homedir(), '/tmp']
       .filter(Boolean)
       .filter((candidate, index, arr) => arr.indexOf(candidate) === index)
@@ -358,26 +384,47 @@ ipcMain.handle('pty:start', async (event, folderPath) => {
     }
 
     let spawnError = null
+    const spawnAttempts = []
     for (const candidateShell of shells.length ? shells : [shell]) {
       for (const candidateCwd of cwdCandidates.length ? cwdCandidates : [os.homedir()]) {
-        try {
-          ptyProcess = pty.spawn(candidateShell, shellArgs, {
-            name: 'xterm-256color',
-            cols: 100,
-            rows: 30,
-            cwd: candidateCwd,
-            env: buildPtyEnv(),
-          })
-          spawnError = null
-          break
-        } catch (err) {
-          spawnError = err
+        const envCandidates = [buildPtyEnv(), buildMinimalPtyEnv(candidateShell)]
+        for (const candidateArgs of shellArgVariants) {
+          for (const [envIndex, candidateEnv] of envCandidates.entries()) {
+            try {
+              ptyProcess = pty.spawn(candidateShell, candidateArgs, {
+                name: 'xterm-256color',
+                cols: 100,
+                rows: 30,
+                cwd: candidateCwd,
+                env: candidateEnv,
+              })
+              spawnError = null
+              break
+            } catch (err) {
+              spawnError = err
+              spawnAttempts.push({
+                shell: candidateShell,
+                cwd: candidateCwd,
+                args: candidateArgs.join(' '),
+                envMode: envIndex === 0 ? 'full' : 'minimal',
+                code: err?.code || '',
+                errno: err?.errno || '',
+                message: err?.message || 'spawn failed',
+              })
+            }
+          }
+          if (ptyProcess) break
         }
+        if (ptyProcess) break
       }
       if (ptyProcess) break
     }
 
-    if (!ptyProcess) throw spawnError || new Error('Unable to start shell')
+    if (!ptyProcess) {
+      const error = spawnError || new Error('Unable to start shell')
+      error.spawnAttempts = spawnAttempts
+      throw error
+    }
 
     ptyProcess.onData(data => {
       event.sender.send('pty:data', data)
@@ -404,8 +451,16 @@ ipcMain.handle('pty:start', async (event, folderPath) => {
     }
 
     if (message.includes('posix_spawnp failed')) {
+      const recentAttempts = (e?.spawnAttempts || [])
+        .slice(-8)
+        .map(
+          attempt =>
+            `- shell=${attempt.shell} cwd=${attempt.cwd} args="${attempt.args}" env=${attempt.envMode} code=${attempt.code || 'n/a'} errno=${attempt.errno || 'n/a'}`
+        )
+        .join('\n')
+
       return {
-        error: `${message}\n\nTried shells: ${resolveShellCandidates().join(', ') || resolveShell()}\nTip: Try opening a different folder and retry.`,
+        error: `${message}\n\nTried shells: ${resolveShellCandidates().join(', ') || resolveShell()}\nRecent attempts:\n${recentAttempts || '- no attempt details'}\nTip: Try opening a different folder and retry.`,
       }
     }
 
