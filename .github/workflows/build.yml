@@ -26,8 +26,7 @@ jobs:
       - name: Node.js einrichten
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 24
 
       # Linux: Build-Tools für node-pty
       - name: Linux Build-Tools installieren
@@ -39,7 +38,7 @@ jobs:
         run: npm install --global node-gyp
 
       - name: Dependencies installieren
-        run: npm ci
+        run: npm install
 
       - name: App bauen (macOS)
         if: matrix.os == 'macos-latest'
