@@ -50,15 +50,15 @@ jobs:
 
       - name: App bauen (macOS)
         if: matrix.os == 'macos-latest'
-        run: npx electron-builder --mac dmg --publish never
+        run: npx vite build && npx electron-builder --mac dmg --publish never
 
       - name: App bauen (Windows)
         if: matrix.os == 'windows-latest'
-        run: npx electron-builder --win nsis --publish never
+        run: npx vite build && npx electron-builder --win nsis --publish never
 
       - name: App bauen (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: npx electron-builder --linux AppImage --publish never
+        run: npx vite build && npx electron-builder --linux AppImage --publish never
 
       - name: Artifacts hochladen
         uses: actions/upload-artifact@v4
