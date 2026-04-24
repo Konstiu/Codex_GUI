@@ -89,7 +89,7 @@ ipcMain.handle('fs:readFile', async (_, filePath) => {
 
 // ─── IPC: Git operations ─────────────────────────────────────────────────────
 
-ipcMain.handle('git:init', async (_, folderPath) => {
+ipcMain.handle('git:init', async (_, folderPath, createIfMissing = true) => {
   try {
     const simpleGit = require('simple-git')
     const git = simpleGit(folderPath)
@@ -102,7 +102,13 @@ ipcMain.handle('git:init', async (_, folderPath) => {
         hasUncommitted: status.files.length > 0,
         branch: status.current,
       }
-    } else {
+    }
+
+    if (!createIfMissing) {
+      return { mode: 'missing', hasUncommitted: false, branch: null }
+    }
+
+    {
       await git.init()
       const files = fs.readdirSync(folderPath).filter(f => !f.startsWith('.'))
       if (files.length > 0) {
@@ -178,21 +184,43 @@ ipcMain.handle('git:restoreCommit', async (_, folderPath, commitHash) => {
 
 let ptyProcess = null
 
+function resolveShell() {
+  if (process.platform === 'win32') return 'cmd.exe'
+
+  if (process.platform === 'linux') {
+    return fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh'
+  }
+
+  const candidates = [process.env.SHELL, '/bin/zsh', '/bin/bash', '/bin/sh'].filter(Boolean)
+  const existing = candidates.find(candidate => fs.existsSync(candidate))
+  return existing || '/bin/zsh'
+}
+
+function buildPtyEnv() {
+  const defaultPath =
+    process.platform === 'darwin'
+      ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+      : '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+  return {
+    ...process.env,
+    PATH: process.env.PATH || defaultPath,
+    TERM: process.env.TERM || 'xterm-256color',
+    COLORTERM: process.env.COLORTERM || 'truecolor',
+  }
+}
+
 ipcMain.handle('pty:start', async (event, folderPath) => {
   try {
     const pty = require('node-pty')
-    const shell =
-      process.platform === 'win32'
-        ? 'cmd.exe'
-        : process.platform === 'linux'
-          ? '/bin/bash'
-          : (process.env.SHELL || '/bin/bash')
+    const shell = resolveShell()
     const shellArgs =
       process.platform === 'win32'
         ? ['/k']
         : process.platform === 'linux'
           ? ['--noprofile', '--norc', '-i']
           : ['-i']
+    const safeCwd = folderPath && fs.existsSync(folderPath) ? folderPath : os.homedir()
 
     if (ptyProcess) {
       ptyProcess.kill()
@@ -203,12 +231,8 @@ ipcMain.handle('pty:start', async (event, folderPath) => {
       name: 'xterm-256color',
       cols: 100,
       rows: 30,
-      cwd: folderPath,
-      env: {
-        ...process.env,
-        TERM: process.env.TERM || 'xterm-256color',
-        COLORTERM: process.env.COLORTERM || 'truecolor',
-      },
+      cwd: safeCwd,
+      env: buildPtyEnv(),
     })
 
     ptyProcess.onData(data => {
@@ -232,6 +256,12 @@ ipcMain.handle('pty:start', async (event, folderPath) => {
     if (isNativeModuleIssue) {
       return {
         error: `${message}\n\nTry running: npm run rebuild:pty`,
+      }
+    }
+
+    if (message.includes('posix_spawnp failed')) {
+      return {
+        error: `${message}\n\nShell: ${resolveShell()}\nTip: Ensure /bin/zsh exists and retry.`,
       }
     }
 

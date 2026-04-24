@@ -33,6 +33,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Linux Build-Tools installieren
         if: matrix.os == 'ubuntu-latest'
@@ -46,7 +47,7 @@ jobs:
           echo "node-gyp installed"
 
       - name: Dependencies installieren
-        run: npm install
+        run: npm ci --include=optional
 
       - name: App bauen (macOS)
         if: matrix.os == 'macos-latest'

@@ -1,6 +1,6 @@
 import styles from './Titlebar.module.css'
 
-export default function Titlebar({ folder, gitState, onOpenFolder, status }) {
+export default function Titlebar({ folder, gitState, onOpenFolder, onEnableVersioning, status }) {
   const folderName = folder ? folder.split('/').pop() || folder.split('\\').pop() : null
 
   return (
@@ -15,8 +15,20 @@ export default function Titlebar({ folder, gitState, onOpenFolder, status }) {
               <span className={styles.folderIcon}>⬡</span>
               <span className={styles.folderName}>{folderName}</span>
               {gitState && (
-                <span className={`${styles.badge} ${gitState.mode === 'new' ? styles.badgeNew : styles.badgeExisting}`}>
-                  {gitState.mode === 'new' ? 'snapshot' : `git · ${gitState.branch || 'main'}`}
+                <span
+                  className={`${styles.badge} ${
+                    gitState.mode === 'missing'
+                      ? styles.badgeMissing
+                      : gitState.mode === 'new'
+                        ? styles.badgeNew
+                        : styles.badgeExisting
+                  }`}
+                >
+                  {gitState.mode === 'missing'
+                    ? 'kein git'
+                    : gitState.mode === 'new'
+                      ? 'snapshot'
+                      : `git · ${gitState.branch || 'main'}`}
                 </span>
               )}
             </div>
@@ -35,6 +47,11 @@ export default function Titlebar({ folder, gitState, onOpenFolder, status }) {
         </div>
 
         <div className={styles.right}>
+          {folder && gitState?.mode === 'missing' && (
+            <button className={styles.versionBtn} onClick={onEnableVersioning}>
+              Versionierung aktivieren
+            </button>
+          )}
           <button className={styles.openBtn} onClick={onOpenFolder}>
             {folder ? 'Anderer Ordner' : 'Ordner öffnen'}
           </button>

@@ -23,29 +23,43 @@ export default function App() {
     if (!path) return
 
     setFolder(path)
+    setGitState(null)
     setSelectedFile(null)
     setDiffData({ diff: '', changedFiles: [] })
 
-    const result = await window.api.gitInit(path)
+    const result = await window.api.gitInit(path, false)
+    if (result.error) {
+      showStatus('error', 'Git-Status konnte nicht gelesen werden: ' + result.error)
+      return
+    }
+
+    setGitState(result)
+
+    if (result.mode === 'existing') {
+      showStatus('info', `Git-Repository erkannt (${result.branch || 'main'})`)
+    } else if (result.mode === 'missing') {
+      showStatus('info', 'Kein Git-Repository gefunden — optional über "Versionierung aktivieren"')
+    }
+  }, [showStatus])
+
+  const refreshDiff = useCallback(async () => {
+    if (!folder || gitState?.mode === 'missing') return
+    const result = await window.api.gitDiff(folder)
+    setDiffData(result)
+  }, [folder, gitState?.mode])
+
+  const enableVersioning = useCallback(async () => {
+    if (!folder) return
+    const result = await window.api.gitInit(folder, true)
     if (result.error) {
       showStatus('error', 'Git konnte nicht initialisiert werden: ' + result.error)
       return
     }
 
     setGitState(result)
-
-    if (result.mode === 'new') {
-      showStatus('success', 'Snapshot erstellt — Änderungen werden verfolgt')
-    } else if (result.mode === 'existing') {
-      showStatus('info', `Git-Repository erkannt (${result.branch || 'main'})`)
-    }
-  }, [showStatus])
-
-  const refreshDiff = useCallback(async () => {
-    if (!folder) return
-    const result = await window.api.gitDiff(folder)
-    setDiffData(result)
-  }, [folder])
+    showStatus('success', 'Versionierung aktiviert — Initial-Snapshot erstellt')
+    await refreshDiff()
+  }, [folder, refreshDiff, showStatus])
 
   const handleSnapshot = useCallback(async (message) => {
     if (!folder) return
@@ -93,6 +107,7 @@ export default function App() {
         folder={folder}
         gitState={gitState}
         onOpenFolder={openFolder}
+        onEnableVersioning={enableVersioning}
         status={status}
       />
 

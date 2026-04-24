@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   readFile: (path) => ipcRenderer.invoke('fs:readFile', path),
 
   // Git
-  gitInit: (folder) => ipcRenderer.invoke('git:init', folder),
+  gitInit: (folder, createIfMissing = true) => ipcRenderer.invoke('git:init', folder, createIfMissing),
   gitDiff: (folder) => ipcRenderer.invoke('git:diff', folder),
   gitSnapshot: (folder, msg) => ipcRenderer.invoke('git:snapshot', folder, msg),
   gitRevert: (folder) => ipcRenderer.invoke('git:revert', folder),
