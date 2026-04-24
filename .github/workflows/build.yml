@@ -1,0 +1,72 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'   # Wird ausgelöst wenn du z.B. "v1.0.0" pushst
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: windows-latest
+            platform: win
+          - os: ubuntu-latest
+            platform: linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Linux: Build-Tools für node-pty
+      - name: Linux Build-Tools installieren
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install -y build-essential python3 libx11-dev libxkbfile-dev
+
+      # Windows: Build-Tools für node-pty
+      - name: Windows Build-Tools installieren
+        if: matrix.os == 'windows-latest'
+        run: npm install --global node-gyp
+
+      - name: Dependencies installieren
+        run: npm ci
+
+      - name: App bauen (macOS)
+        if: matrix.os == 'macos-latest'
+        run: npm run build -- --mac dmg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: App bauen (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npm run build -- --win nsis
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: App bauen (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run build -- --linux AppImage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Fertiges Executable als GitHub Release hochladen
+      - name: Release erstellen & Dateien hochladen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

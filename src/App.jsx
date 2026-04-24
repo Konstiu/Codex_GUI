@@ -1,0 +1,119 @@
+import { useState, useCallback, useEffect } from 'react'
+import FileExplorer from './components/FileExplorer.jsx'
+import Terminal from './components/Terminal.jsx'
+import DiffViewer from './components/DiffViewer.jsx'
+import Titlebar from './components/Titlebar.jsx'
+import WelcomeScreen from './components/WelcomeScreen.jsx'
+import styles from './styles/App.module.css'
+
+export default function App() {
+  const [folder, setFolder] = useState(null)
+  const [gitState, setGitState] = useState(null) // { mode, hasUncommitted, branch }
+  const [diffData, setDiffData] = useState({ diff: '', changedFiles: [] })
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [status, setStatus] = useState(null) // { type: 'info'|'success'|'error', message }
+
+  const showStatus = useCallback((type, message) => {
+    setStatus({ type, message })
+    setTimeout(() => setStatus(null), 3500)
+  }, [])
+
+  const openFolder = useCallback(async () => {
+    const path = await window.api.openFolder()
+    if (!path) return
+
+    setFolder(path)
+    setSelectedFile(null)
+    setDiffData({ diff: '', changedFiles: [] })
+
+    const result = await window.api.gitInit(path)
+    if (result.error) {
+      showStatus('error', 'Git konnte nicht initialisiert werden: ' + result.error)
+      return
+    }
+
+    setGitState(result)
+
+    if (result.mode === 'new') {
+      showStatus('success', 'Snapshot erstellt — Änderungen werden verfolgt')
+    } else if (result.mode === 'existing') {
+      showStatus('info', `Git-Repository erkannt (${result.branch || 'main'})`)
+    }
+  }, [showStatus])
+
+  const refreshDiff = useCallback(async () => {
+    if (!folder) return
+    const result = await window.api.gitDiff(folder)
+    setDiffData(result)
+  }, [folder])
+
+  const handleSnapshot = useCallback(async (message) => {
+    if (!folder) return
+    const result = await window.api.gitSnapshot(folder, message)
+    if (result.error) {
+      showStatus('error', 'Snapshot fehlgeschlagen: ' + result.error)
+    } else {
+      showStatus('success', 'Version gespeichert ✓')
+      await refreshDiff()
+    }
+  }, [folder, refreshDiff, showStatus])
+
+  const handleRevert = useCallback(async () => {
+    if (!folder) return
+    const result = await window.api.gitRevert(folder)
+    if (result.error) {
+      showStatus('error', 'Zurücksetzen fehlgeschlagen: ' + result.error)
+    } else {
+      showStatus('success', 'Änderungen zurückgesetzt ✓')
+      await refreshDiff()
+    }
+  }, [folder, refreshDiff, showStatus])
+
+  // Auto-refresh diff every 3 seconds when a folder is open
+  useEffect(() => {
+    if (!folder) return
+    const interval = setInterval(refreshDiff, 3000)
+    return () => clearInterval(interval)
+  }, [folder, refreshDiff])
+
+  return (
+    <div className={styles.app}>
+      <Titlebar
+        folder={folder}
+        gitState={gitState}
+        onOpenFolder={openFolder}
+        status={status}
+      />
+
+      {!folder ? (
+        <WelcomeScreen onOpenFolder={openFolder} />
+      ) : (
+        <div className={styles.layout}>
+          <div className={styles.sidebar}>
+            <FileExplorer
+              folder={folder}
+              selectedFile={selectedFile}
+              onSelectFile={setSelectedFile}
+              changedFiles={diffData.changedFiles}
+            />
+          </div>
+
+          <div className={styles.center}>
+            <Terminal folder={folder} onOutput={refreshDiff} />
+          </div>
+
+          <div className={styles.panel}>
+            <DiffViewer
+              diff={diffData.diff}
+              changedFiles={diffData.changedFiles}
+              selectedFile={selectedFile}
+              onSnapshot={handleSnapshot}
+              onRevert={handleRevert}
+              folder={folder}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

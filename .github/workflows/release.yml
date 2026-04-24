@@ -1,0 +1,112 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: windows-latest
+            platform: win
+          - os: ubuntu-latest
+            platform: linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Linux Build-Tools installieren
+        if: matrix.os == "ubuntu-latest"
+        run: sudo apt-get install -y build-essential python3 libsecret-1-dev
+
+      - name: Dependencies installieren
+        run: npm ci
+
+      - name: App bauen (macOS)
+        if: matrix.os == "macos-latest"
+        run: npx electron-builder --mac --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: App bauen (Windows)
+        if: matrix.os == "windows-latest"
+        run: npx electron-builder --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: App bauen (Linux)
+        if: matrix.os == "ubuntu-latest"
+        run: npx electron-builder --linux --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build-Artefakte hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: warn
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Alle Artefakte herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Dateien flach ablegen
+        run: find artifacts/ -type f -exec cp {} release-files/ \; && ls release-files/
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ordner erstellen
+        run: mkdir -p release-files
+
+      - name: Dateien sammeln
+        run: find artifacts/ -type f | while read f; do cp "$f" release-files/; done
+
+      - name: GitHub Release erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Codex GUI ${{ github.ref_name }}"
+          body: |
+            ## Codex GUI ${{ github.ref_name }}
+
+            ### Download
+            | Plattform | Datei |
+            |-----------|-------|
+            | macOS | `.dmg` |
+            | Windows | `.exe` (Installer) |
+            | Linux | `.AppImage` |
+
+            ### Voraussetzungen
+            - [Git](https://git-scm.com/) muss installiert sein
+            - [Codex CLI](https://github.com/openai/codex): `npm install -g @openai/codex`
+          files: release-files/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

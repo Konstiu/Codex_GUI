@@ -1,0 +1,38 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 240px 1fr 300px;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
+}
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+}
+
+.center {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+}
+
+.panel {
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+}

@@ -1,0 +1,120 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbarLabel {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.statusIndicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.3s;
+}
+
+.statusOn {
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(61, 214, 140, 0.5);
+}
+
+.terminalContainer {
+  flex: 1;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.terminal {
+  width: 100%;
+  height: 100%;
+}
+
+/* xterm.js overrides */
+.terminal :global(.xterm) {
+  height: 100%;
+}
+
+.terminal :global(.xterm-viewport) {
+  background: transparent !important;
+}
+
+.btn {
+  font-family: var(--font-ui);
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.btnPrimary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: #6b5ef0;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btnCodex {
+  background: rgba(124, 110, 248, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(124, 110, 248, 0.3);
+}
+
+.btnCodex:hover {
+  background: rgba(124, 110, 248, 0.25);
+}
+
+.btnSecondary {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btnSecondary:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btnDanger {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(245, 101, 101, 0.25);
+}
+
+.btnDanger:hover {
+  background: rgba(245, 101, 101, 0.2);
+}
