@@ -8,7 +8,8 @@
 		"dev": "npm run rebuild:pty && concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
 		"build": "vite build && electron-builder",
 		"preview": "vite preview",
-		"rebuild:pty": "electron-builder install-app-deps",
+		"rebuild:pty": "electron-builder install-app-deps && npm run fix:pty-permissions",
+		"fix:pty-permissions": "node scripts/fix-node-pty-permissions.js",
 		"postinstall": "npm run rebuild:pty"
 	},
 	"dependencies": {
