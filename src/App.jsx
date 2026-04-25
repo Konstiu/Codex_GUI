@@ -12,6 +12,8 @@ export default function App() {
   const [diffData, setDiffData] = useState({ diff: '', changedFiles: [] })
   const [selectedFile, setSelectedFile] = useState(null)
   const [status, setStatus] = useState(null) // { type: 'info'|'success'|'error', message }
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
 
   const showStatus = useCallback((type, message) => {
     setStatus({ type, message })
@@ -26,6 +28,8 @@ export default function App() {
     setGitState(null)
     setSelectedFile(null)
     setDiffData({ diff: '', changedFiles: [] })
+    setIsSidebarCollapsed(false)
+    setIsPanelCollapsed(false)
 
     const result = await window.api.gitInit(path, false)
     if (result.error) {
@@ -114,31 +118,55 @@ export default function App() {
       {!folder ? (
         <WelcomeScreen onOpenFolder={openFolder} />
       ) : (
-        <div className={styles.layout}>
-          <div className={styles.sidebar}>
-            <FileExplorer
-              folder={folder}
-              selectedFile={selectedFile}
-              onSelectFile={setSelectedFile}
-              changedFiles={diffData.changedFiles}
-            />
-          </div>
+        <div
+          className={`${styles.layout} ${isSidebarCollapsed ? styles.sidebarCollapsed : ''} ${isPanelCollapsed ? styles.panelCollapsed : ''}`}
+        >
+          {!isSidebarCollapsed && (
+            <div className={styles.sidebar}>
+              <FileExplorer
+                folder={folder}
+                selectedFile={selectedFile}
+                onSelectFile={setSelectedFile}
+                changedFiles={diffData.changedFiles}
+              />
+            </div>
+          )}
 
           <div className={styles.center}>
+            <div className={styles.centerToolbar}>
+              <button
+                className={styles.collapseBtn}
+                onClick={() => setIsSidebarCollapsed(v => !v)}
+                title={isSidebarCollapsed ? 'Dateien einblenden' : 'Dateien ausblenden'}
+              >
+                <span className={styles.collapseIcon}>{isSidebarCollapsed ? '◂' : '▸'}</span>
+                <span className={styles.collapseLabel}>Dateien</span>
+              </button>
+              <button
+                className={styles.collapseBtn}
+                onClick={() => setIsPanelCollapsed(v => !v)}
+                title={isPanelCollapsed ? 'Versionierung einblenden' : 'Versionierung ausblenden'}
+              >
+                <span className={styles.collapseLabel}>Versionierung</span>
+                <span className={styles.collapseIcon}>{isPanelCollapsed ? '▸' : '◂'}</span>
+              </button>
+            </div>
             <Terminal folder={folder} onOutput={refreshDiff} />
           </div>
 
-          <div className={styles.panel}>
-            <DiffViewer
-              diff={diffData.diff}
-              changedFiles={diffData.changedFiles}
-              selectedFile={selectedFile}
-              onSnapshot={handleSnapshot}
-              onRevert={handleRevert}
-              onRestoreCommit={handleRestoreCommit}
-              folder={folder}
-            />
-          </div>
+          {!isPanelCollapsed && (
+            <div className={styles.panel}>
+              <DiffViewer
+                diff={diffData.diff}
+                changedFiles={diffData.changedFiles}
+                selectedFile={selectedFile}
+                onSnapshot={handleSnapshot}
+                onRevert={handleRevert}
+                onRestoreCommit={handleRestoreCommit}
+                folder={folder}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

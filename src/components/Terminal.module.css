@@ -114,6 +114,16 @@
   color: var(--text-primary);
 }
 
+.btnRestart {
+  background: rgba(34, 211, 238, 0.12);
+  color: #67e8f9;
+  border: 1px solid rgba(34, 211, 238, 0.28);
+}
+
+.btnRestart:hover {
+  background: rgba(34, 211, 238, 0.2);
+}
+
 .btnDanger {
   background: var(--red-dim);
   color: var(--red);

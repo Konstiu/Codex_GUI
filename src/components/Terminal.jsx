@@ -8,10 +8,35 @@ export default function Terminal({ folder, onOutput }) {
   const containerRef = useRef(null)
   const [isRunning, setIsRunning] = useState(false)
   const [isReady, setIsReady] = useState(false)
-  const [codexAvailable, setCodexAvailable] = useState(false)
+  const [codexState, setCodexState] = useState('idle') // idle | starting | running | stopped | missing
   const outputBuffer = useRef('')
   const isRunningRef = useRef(false)
   const initGenerationRef = useRef(0)
+  const codexStateRef = useRef('idle')
+  const codexStartTimerRef = useRef(null)
+  const codexMissingAnnouncedRef = useRef(false)
+
+  const syncCodexState = useCallback((next) => {
+    codexStateRef.current = next
+    setCodexState(next)
+  }, [])
+
+  const launchCodex = useCallback(() => {
+    if (!isRunningRef.current) return
+    if (codexStartTimerRef.current) clearTimeout(codexStartTimerRef.current)
+    codexMissingAnnouncedRef.current = false
+    syncCodexState('starting')
+    xtermRef.current?.writeln('\x1b[38;5;245m# Starte codex…\x1b[0m')
+    window.api.ptyWrite('codex\r')
+
+    // If no immediate shell error appears, assume codex started.
+    codexStartTimerRef.current = setTimeout(() => {
+      if (codexStateRef.current === 'starting') {
+        syncCodexState('running')
+      }
+      codexStartTimerRef.current = null
+    }, 1200)
+  }, [syncCodexState])
   const focusTerminal = useCallback(() => {
     xtermRef.current?.focus()
     termRef.current?.querySelector('textarea')?.focus()
@@ -94,8 +119,7 @@ export default function Terminal({ folder, onOutput }) {
       term.writeln('\x1b[38;5;99m║         Codex GUI — Terminal          ║\x1b[0m')
       term.writeln('\x1b[38;5;99m╚═══════════════════════════════════════╝\x1b[0m')
       term.writeln('')
-      term.writeln('\x1b[38;5;245mBereit. Klicke "Terminal starten" um die Shell zu öffnen.\x1b[0m')
-      term.writeln('\x1b[38;5;245mDanach kannst du z.B. \x1b[38;5;147mcodex\x1b[38;5;245m eingeben.\x1b[0m')
+      term.writeln('\x1b[38;5;245mBereit. Klicke "Codex starten" um direkt loszulegen.\x1b[0m')
       term.writeln('')
     }
 
@@ -103,6 +127,7 @@ export default function Terminal({ folder, onOutput }) {
 
     return () => {
       disposed = true
+      if (codexStartTimerRef.current) clearTimeout(codexStartTimerRef.current)
       if (term) term.dispose()
     }
   }, [focusTerminal])
@@ -121,8 +146,8 @@ export default function Terminal({ folder, onOutput }) {
     return () => observer.disconnect()
   }, [])
 
-  const startTerminal = useCallback(async () => {
-    if (!folder || isRunning) return
+  const startTerminal = useCallback(async ({ autoRunCodex = false } = {}) => {
+    if (!folder || isRunningRef.current) return
 
     // Register listeners before spawning PTY to avoid missing early events.
     window.api.offPtyData()
@@ -131,6 +156,31 @@ export default function Terminal({ folder, onOutput }) {
       xtermRef.current?.write(data)
       xtermRef.current?.scrollToBottom()
       outputBuffer.current += data
+
+      const missingCodexRegex = /(command not found:\s*codex|codex: command not found|not recognized as an internal or external command)/i
+      if (missingCodexRegex.test(data)) {
+        if (!codexMissingAnnouncedRef.current) {
+          xtermRef.current?.writeln('\r\n\x1b[31m[Fehler] Codex ist nicht installiert oder nicht im PATH.\x1b[0m')
+          xtermRef.current?.writeln('\x1b[38;5;245mInstalliere z.B. mit: npm install -g @openai/codex\x1b[0m')
+          codexMissingAnnouncedRef.current = true
+        }
+        if (codexStartTimerRef.current) {
+          clearTimeout(codexStartTimerRef.current)
+          codexStartTimerRef.current = null
+        }
+        syncCodexState('missing')
+      }
+
+      // If prompt reappears while codex was running/starting, codex is no longer active.
+      const shellPromptRegex = /(^|\n)[^\n]{0,160}(\$|#|%)\s$/m
+      if ((codexStateRef.current === 'running' || codexStateRef.current === 'starting') && shellPromptRegex.test(data)) {
+        if (codexStartTimerRef.current) {
+          clearTimeout(codexStartTimerRef.current)
+          codexStartTimerRef.current = null
+        }
+        if (codexStateRef.current !== 'missing') syncCodexState('stopped')
+      }
+
       // Notify parent after quiet period
       clearTimeout(window._diffTimeout)
       window._diffTimeout = setTimeout(() => {
@@ -144,7 +194,11 @@ export default function Terminal({ folder, onOutput }) {
     window.api.onPtyExit(() => {
       isRunningRef.current = false
       setIsRunning(false)
-      setCodexAvailable(false)
+      if (codexStartTimerRef.current) {
+        clearTimeout(codexStartTimerRef.current)
+        codexStartTimerRef.current = null
+      }
+      syncCodexState('idle')
       xtermRef.current?.writeln('\r\n\x1b[38;5;245m[Shell beendet]\x1b[0m')
       window.api.offPtyData()
       window.api.offPtyExit()
@@ -154,6 +208,7 @@ export default function Terminal({ folder, onOutput }) {
     if (result.error) {
       isRunningRef.current = false
       setIsRunning(false)
+      syncCodexState('idle')
       xtermRef.current?.writeln(`\x1b[31mFehler: ${result.error}\x1b[0m`)
       window.api.offPtyData()
       window.api.offPtyExit()
@@ -162,7 +217,7 @@ export default function Terminal({ folder, onOutput }) {
 
     isRunningRef.current = true
     setIsRunning(true)
-    setCodexAvailable(false)
+    syncCodexState('stopped')
 
     // Fit and sync size
     fitAddonRef.current?.fit()
@@ -171,38 +226,32 @@ export default function Terminal({ folder, onOutput }) {
     focusTerminal()
     xtermRef.current?.scrollToBottom()
     window.api.ptyWrite('\r')
-
-    // Send codex launch hint
-    xtermRef.current?.writeln('\x1b[38;5;245m# Prüfe Codex CLI…\x1b[0m')
-    const codexResult = await window.api.codexEnsure()
-    if (codexResult?.ok) {
-      setCodexAvailable(true)
-      if (codexResult.status === 'installed') {
-        xtermRef.current?.writeln('\x1b[32m# Codex CLI wurde installiert\x1b[0m')
-      } else {
-        xtermRef.current?.writeln('\x1b[38;5;245m# Codex CLI ist verfügbar\x1b[0m')
-      }
-      xtermRef.current?.writeln('\x1b[38;5;245m# Tipp: gib "codex" ein um Codex AI zu starten\x1b[0m')
-    } else {
-      setCodexAvailable(false)
-      xtermRef.current?.writeln(`\x1b[31m# Codex CLI nicht bereit: ${codexResult?.message || 'Unbekannter Fehler'}\x1b[0m`)
-      if (codexResult?.status === 'missing_node') {
-        xtermRef.current?.writeln('\x1b[38;5;245m# Installiere Node.js und starte das Terminal neu.\x1b[0m')
-      }
-      if (codexResult?.status === 'missing_npm') {
-        xtermRef.current?.writeln('\x1b[38;5;245m# Installiere Node.js (inkl. npm) und starte das Terminal neu.\x1b[0m')
-      }
+    if (autoRunCodex) {
+      launchCodex()
     }
-  }, [folder, isRunning, onOutput, focusTerminal])
+  }, [folder, onOutput, focusTerminal, syncCodexState, launchCodex])
 
   const stopTerminal = useCallback(async () => {
     await window.api.ptyKill()
     isRunningRef.current = false
     setIsRunning(false)
-    setCodexAvailable(false)
+    if (codexStartTimerRef.current) {
+      clearTimeout(codexStartTimerRef.current)
+      codexStartTimerRef.current = null
+    }
+    syncCodexState('idle')
     window.api.offPtyData()
     window.api.offPtyExit()
-  }, [])
+  }, [syncCodexState])
+
+  const restartCodex = useCallback(async () => {
+    if (isRunningRef.current) {
+      await stopTerminal()
+      // Give PTY bridge a short moment to tear down before respawn.
+      await new Promise(resolve => setTimeout(resolve, 120))
+    }
+    await startTerminal({ autoRunCodex: true })
+  }, [startTerminal, stopTerminal])
 
   const clearTerminal = useCallback(() => {
     xtermRef.current?.clear()
@@ -211,9 +260,12 @@ export default function Terminal({ folder, onOutput }) {
   }, [focusTerminal])
 
   const runCodex = useCallback(() => {
-    if (!isRunning || !codexAvailable) return
-    window.api.ptyWrite('codex\r')
-  }, [isRunning, codexAvailable])
+    if (isRunning) {
+      launchCodex()
+      return
+    }
+    startTerminal({ autoRunCodex: true })
+  }, [isRunning, startTerminal, launchCodex])
 
   return (
     <div className={styles.wrapper}>
@@ -221,28 +273,45 @@ export default function Terminal({ folder, onOutput }) {
         <div className={styles.toolbarLeft}>
           <div className={`${styles.statusIndicator} ${isRunning ? styles.statusOn : ''}`} />
           <span className={styles.toolbarLabel}>
-            {isRunning ? 'Shell aktiv' : 'Shell inaktiv'}
+            {!isRunning
+              ? 'Shell inaktiv'
+              : codexState === 'running'
+                ? 'Shell aktiv · Codex läuft'
+                : codexState === 'starting'
+                  ? 'Shell aktiv · Codex startet…'
+                  : codexState === 'missing'
+                    ? 'Shell aktiv · Codex fehlt'
+                    : 'Shell aktiv · Codex gestoppt'}
           </span>
         </div>
 
         <div className={styles.toolbarRight}>
           {!isRunning ? (
-            <button
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={startTerminal}
-              disabled={!isReady}
-            >
-              ▶ Terminal starten
-            </button>
+            <>
+              <button
+                className={`${styles.btn} ${styles.btnCodex}`}
+                onClick={runCodex}
+                disabled={!isReady}
+              >
+                🤖 Codex starten
+              </button>
+            </>
           ) : (
             <>
               <button
                 className={`${styles.btn} ${styles.btnCodex}`}
                 onClick={runCodex}
-                disabled={!codexAvailable}
               >
                 🤖 Codex starten
               </button>
+              {codexState !== 'running' && (
+                <button
+                  className={`${styles.btn} ${styles.btnRestart}`}
+                  onClick={restartCodex}
+                >
+                  ↻ Neustart
+                </button>
+              )}
               <button
                 className={`${styles.btn} ${styles.btnSecondary}`}
                 onClick={clearTerminal}
