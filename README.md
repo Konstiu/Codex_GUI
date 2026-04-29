@@ -1,81 +1,87 @@
 # Codex GUI
 
-Eine grafische Oberfläche für [Codex CLI](https://github.com/openai/codex) — AI-gestütztes Coding ohne Terminal-Kenntnisse.
+A desktop GUI for [Codex CLI](https://github.com/openai/codex) - AI-assisted coding with an embedded terminal and built-in versioning workflow.
 
 ## Features
 
-- **File Explorer** — Projektordner öffnen, Dateien durchsuchen, geänderte Dateien hervorheben
-- **Embedded Terminal** — xterm.js + node-pty, startet direkt im Projektordner
-- **Diff Viewer** — zeigt Änderungen von Codex in Echtzeit an
-- **Version Control** — automatisches Git im Hintergrund (unsichtbar für den User)
-  - Kein `.git` vorhanden → wird automatisch angelegt, Snapshot erstellt
-  - `.git` vorhanden → wird genutzt, keine automatischen Commits
-- **Zurücksetzen** — Änderungen auf einen Knopfdruck rückgängig machen
-- **Versionsverlauf** — gespeicherte Snapshots anzeigen
+- **File Explorer** - open a project folder, browse files, highlight changed files
+- **Embedded Terminal** - xterm.js + node-pty, starts directly in your project folder
+- **Diff Viewer** - shows Codex changes in near real time
+- **Version Control** - Git workflow integrated in the UI
+  - No `.git` present -> you can enable versioning and create an initial snapshot
+  - Existing `.git` present -> repository is reused
+- **Revert** - roll back working changes quickly
+- **History** - view and restore saved snapshots
 
-## Voraussetzungen
+## Requirements
 
 ```bash
 # Node.js >= 18 (https://nodejs.org)
 node --version
 
-# Codex CLI installieren
+# Install Codex CLI
 npm install -g @openai/codex
 ```
 
-## Installation & Start
+## Install & Run
 
 ```bash
-# Dependencies installieren
+# Install dependencies
 npm install
 
-# Falls das eingebettete Terminal nicht startet (node-pty):
+# If embedded terminal does not start correctly (node-pty)
 npm run rebuild:pty
 
-# Im Entwicklungsmodus starten (Vite + Electron)
+# Start in development mode (Vite + Electron)
 npm run dev
 
-# Für Produktion bauen
+# Build production app
 npm run build
 ```
 
-## Projektstruktur
+### macOS Note (App from Downloads/Releases)
 
+If macOS blocks the app on first launch, remove the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Codex GUI.app"
 ```
+
+## Project Structure
+
+```text
 codex-gui/
-├── main.js              # Electron Hauptprozess (IPC, Git, PTY)
-├── preload.js           # Electron Preload (sichere API-Brücke)
-├── vite.config.js       # Vite Konfiguration
-├── index.html           # HTML Entry Point
+├── main.js              # Electron main process (IPC, Git, PTY)
+├── preload.js           # Electron preload (safe API bridge)
+├── vite.config.js       # Vite config
+├── index.html           # HTML entry point
 └── src/
-    ├── main.jsx         # React Entry Point
-    ├── App.jsx          # Hauptkomponente (Layout + State)
+    ├── main.jsx         # React entry point
+    ├── App.jsx          # Main layout + app state
     ├── styles/
-    │   ├── global.css   # Globale Styles + CSS Variables
+    │   ├── global.css   # Global styles + CSS variables
     │   └── App.module.css
     └── components/
-        ├── Titlebar.jsx         # Titelleiste mit Status
-        ├── WelcomeScreen.jsx    # Startbildschirm
-        ├── FileExplorer.jsx     # Dateibaum links
-        ├── Terminal.jsx         # xterm.js Terminal mitte
-        └── DiffViewer.jsx       # Diff + Versionierung rechts
+        ├── Titlebar.jsx          # Top bar with folder + actions
+        ├── FileExplorer.jsx      # File tree (left)
+        ├── Terminal.jsx          # xterm.js terminal (center)
+        ├── DiffViewer.jsx        # Changes/history panel (right)
+        └── WelcomeScreen.jsx     # Legacy welcome screen component
 ```
 
-## Git-Logik
+## Git Behavior
 
-| Situation | Was passiert |
-|-----------|-------------|
-| Ordner hat kein `.git` | Automatisch `git init` + Initial Commit (Snapshot) |
-| Ordner hat `.git` | Wird genutzt, keine automatischen Commits |
-| User klickt "Version speichern" | `git add . && git commit` |
-| User klickt "Zurücksetzen" | `git checkout .` |
+| Situation | Behavior |
+|-----------|----------|
+| Folder has no `.git` | You can enable versioning to run `git init` + initial commit |
+| Folder has `.git` | Existing repository is used |
+| User clicks `Save version` | `git add . && git commit` |
+| User clicks `Revert` | Revert working changes to `HEAD` |
 
-Der User sieht kein Git — nur "Snapshot erstellt", "Version speichern", "Zurücksetzen".
+## Tech Stack
 
-## Technologien
-
-- **Electron** — Cross-Platform Desktop App
-- **React + Vite** — Frontend
-- **xterm.js + @xterm/addon-fit** — Terminal-Emulator
-- **node-pty** — Native PTY für echtes Terminal
-- **simple-git** — Git-Operationen
+- **Electron** - cross-platform desktop app shell
+- **React + Vite** - frontend
+- **xterm.js + @xterm/addon-fit** - terminal emulator
+- **node-pty** - native PTY bridge
+- **simple-git** - Git operations
