@@ -107,11 +107,11 @@ export default function Terminal({ folder, onOutput }) {
       fitAddonRef.current = fitAddon
       setIsReady(true)
 
-      // Keep a single keyboard handler for the terminal lifetime.
-      // `onKey` is more reliable than `onData` for some Linux/Electron setups.
-      term.onKey(({ key }) => {
+      // Forward all terminal input to PTY.
+      // `onData` also includes paste and IME input, while `onKey` does not.
+      term.onData((data) => {
         if (!isRunningRef.current) return
-        window.api.ptyWrite(key)
+        window.api.ptyWrite(data)
         xtermRef.current?.scrollToBottom()
       })
 
