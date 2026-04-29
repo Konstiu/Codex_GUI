@@ -112,14 +112,14 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, o
           className={`${styles.tab} ${activeTab === 'changes' ? styles.tabActive : ''}`}
           onClick={() => setActiveTab('changes')}
         >
-          Änderungen
+          Changes
           {hasChanges && <span className={styles.tabBadge}>{changedFiles.length}</span>}
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'history' ? styles.tabActive : ''}`}
           onClick={loadHistory}
         >
-          Verlauf
+          History
         </button>
       </div>
 
@@ -131,19 +131,19 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, o
               className={`${styles.actionBtn} ${styles.actionRevert}`}
               onClick={onRevert}
             >
-              ↩ Zurücksetzen
+              ↩ Revert
             </button>
             <button
               className={`${styles.actionBtn} ${styles.actionSave}`}
               onClick={() => setShowSnapshotInput(s => !s)}
             >
-              💾 Version speichern
+              💾 Save version
             </button>
           </>
         ) : (
           <div className={styles.noChanges}>
             <span className={styles.noChangesIcon}>✓</span>
-            Keine Änderungen
+            No changes
           </div>
         )}
       </div>
@@ -153,14 +153,14 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, o
         <div className={styles.snapshotInput}>
           <input
             className={styles.msgInput}
-            placeholder="Beschreibung (optional)…"
+            placeholder="Description (optional)…"
             value={snapshotMsg}
             onChange={e => setSnapshotMsg(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSnapshot()}
             autoFocus
           />
           <button className={`${styles.actionBtn} ${styles.actionSave}`} onClick={handleSnapshot}>
-            Speichern
+            Save
           </button>
         </div>
       )}
@@ -172,8 +172,8 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, o
             {!hasChanges ? (
               <div className={styles.emptyState}>
                 <div className={styles.emptyIcon}>◈</div>
-                <p>Noch keine Änderungen durch Codex.</p>
-                <p>Starte das Terminal und führe Codex aus.</p>
+                <p>No changes from Codex yet.</p>
+                <p>Start the terminal and run Codex.</p>
               </div>
             ) : parsedFiles.length === 0 ? (
               <div className={styles.changedList}>
@@ -197,10 +197,10 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, o
         {activeTab === 'history' && (
           <div className={styles.historyList}>
             {loadingHistory ? (
-              <div className={styles.loading}>Lade Verlauf…</div>
+              <div className={styles.loading}>Loading history…</div>
             ) : history.length === 0 ? (
               <div className={styles.emptyState}>
-                <p>Noch keine gespeicherten Versionen.</p>
+                <p>No saved versions yet.</p>
               </div>
             ) : (
               history.map((commit, i) => (
@@ -209,7 +209,7 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, o
                   <div className={styles.commitInfo}>
                     <div className={styles.commitMessage}>{commit.message}</div>
                     <div className={styles.commitMeta}>
-                      {new Date(commit.date).toLocaleString('de-AT', {
+                      {new Date(commit.date).toLocaleString('en-US', {
                         day: '2-digit', month: '2-digit',
                         hour: '2-digit', minute: '2-digit',
                       })}
@@ -219,9 +219,9 @@ export default function DiffViewer({ diff, changedFiles, onSnapshot, onRevert, o
                   <button
                     className={`${styles.actionBtn} ${styles.actionRestore}`}
                     onClick={() => handleRestoreCommit(commit.hash)}
-                    title={`Stand ${commit.hash.slice(0, 7)} wiederherstellen`}
+                    title={`Restore ${commit.hash.slice(0, 7)}`}
                   >
-                    Zu diesem Stand
+                    Restore this
                   </button>
                 </div>
               ))

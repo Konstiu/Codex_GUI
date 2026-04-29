@@ -1,9 +1,8 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import FileExplorer from './components/FileExplorer.jsx'
 import Terminal from './components/Terminal.jsx'
 import DiffViewer from './components/DiffViewer.jsx'
 import Titlebar from './components/Titlebar.jsx'
-import WelcomeScreen from './components/WelcomeScreen.jsx'
 import styles from './styles/App.module.css'
 
 export default function App() {
@@ -14,6 +13,7 @@ export default function App() {
   const [status, setStatus] = useState(null) // { type: 'info'|'success'|'error', message }
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+  const didPromptForFolderRef = useRef(false)
 
   const showStatus = useCallback((type, message) => {
     setStatus({ type, message })
@@ -33,16 +33,16 @@ export default function App() {
 
     const result = await window.api.gitInit(path, false)
     if (result.error) {
-      showStatus('error', 'Git-Status konnte nicht gelesen werden: ' + result.error)
+      showStatus('error', 'Could not read Git state: ' + result.error)
       return
     }
 
     setGitState(result)
 
     if (result.mode === 'existing') {
-      showStatus('info', `Git-Repository erkannt (${result.branch || 'main'})`)
+      showStatus('info', `Git repository detected (${result.branch || 'main'})`)
     } else if (result.mode === 'missing') {
-      showStatus('info', 'Kein Git-Repository gefunden — optional über "Versionierung aktivieren"')
+      showStatus('info', 'No Git repository found - you can enable versioning if needed')
     }
   }, [showStatus])
 
@@ -56,12 +56,12 @@ export default function App() {
     if (!folder) return
     const result = await window.api.gitInit(folder, true)
     if (result.error) {
-      showStatus('error', 'Git konnte nicht initialisiert werden: ' + result.error)
+      showStatus('error', 'Failed to initialize Git: ' + result.error)
       return
     }
 
     setGitState(result)
-    showStatus('success', 'Versionierung aktiviert — Initial-Snapshot erstellt')
+    showStatus('success', 'Versioning enabled - initial snapshot created')
     await refreshDiff()
   }, [folder, refreshDiff, showStatus])
 
@@ -69,9 +69,9 @@ export default function App() {
     if (!folder) return
     const result = await window.api.gitSnapshot(folder, message)
     if (result.error) {
-      showStatus('error', 'Snapshot fehlgeschlagen: ' + result.error)
+      showStatus('error', 'Snapshot failed: ' + result.error)
     } else {
-      showStatus('success', 'Version gespeichert ✓')
+      showStatus('success', 'Version saved ✓')
       await refreshDiff()
     }
   }, [folder, refreshDiff, showStatus])
@@ -80,9 +80,9 @@ export default function App() {
     if (!folder) return
     const result = await window.api.gitRevert(folder)
     if (result.error) {
-      showStatus('error', 'Zurücksetzen fehlgeschlagen: ' + result.error)
+      showStatus('error', 'Revert failed: ' + result.error)
     } else {
-      showStatus('success', 'Änderungen zurückgesetzt ✓')
+      showStatus('success', 'Changes reverted ✓')
       await refreshDiff()
     }
   }, [folder, refreshDiff, showStatus])
@@ -91,12 +91,18 @@ export default function App() {
     if (!folder) return
     const result = await window.api.gitRestoreCommit(folder, commitHash)
     if (result.error) {
-      showStatus('error', 'Wiederherstellen fehlgeschlagen: ' + result.error)
+      showStatus('error', 'Restore failed: ' + result.error)
     } else {
-      showStatus('success', `Stand ${commitHash.slice(0, 7)} wiederhergestellt`)
+      showStatus('success', `Restored ${commitHash.slice(0, 7)}`)
       await refreshDiff()
     }
   }, [folder, refreshDiff, showStatus])
+
+  useEffect(() => {
+    if (didPromptForFolderRef.current || folder) return
+    didPromptForFolderRef.current = true
+    openFolder()
+  }, [folder, openFolder])
 
   // Auto-refresh diff every 3 seconds when a folder is open
   useEffect(() => {
@@ -115,60 +121,58 @@ export default function App() {
         status={status}
       />
 
-      {!folder ? (
-        <WelcomeScreen onOpenFolder={openFolder} />
-      ) : (
-        <div
-          className={`${styles.layout} ${isSidebarCollapsed ? styles.sidebarCollapsed : ''} ${isPanelCollapsed ? styles.panelCollapsed : ''}`}
-        >
-          {!isSidebarCollapsed && (
-            <div className={styles.sidebar}>
-              <FileExplorer
-                folder={folder}
-                selectedFile={selectedFile}
-                onSelectFile={setSelectedFile}
-                changedFiles={diffData.changedFiles}
-              />
-            </div>
-          )}
-
-          <div className={styles.center}>
-            <div className={styles.centerToolbar}>
-              <button
-                className={styles.collapseBtn}
-                onClick={() => setIsSidebarCollapsed(v => !v)}
-                title={isSidebarCollapsed ? 'Dateien einblenden' : 'Dateien ausblenden'}
-              >
-                <span className={styles.collapseIcon}>{isSidebarCollapsed ? '◂' : '▸'}</span>
-                <span className={styles.collapseLabel}>Dateien</span>
-              </button>
-              <button
-                className={styles.collapseBtn}
-                onClick={() => setIsPanelCollapsed(v => !v)}
-                title={isPanelCollapsed ? 'Versionierung einblenden' : 'Versionierung ausblenden'}
-              >
-                <span className={styles.collapseLabel}>Versionierung</span>
-                <span className={styles.collapseIcon}>{isPanelCollapsed ? '▸' : '◂'}</span>
-              </button>
-            </div>
-            <Terminal folder={folder} onOutput={refreshDiff} />
-          </div>
-
-          {!isPanelCollapsed && (
-            <div className={styles.panel}>
-              <DiffViewer
-                diff={diffData.diff}
-                changedFiles={diffData.changedFiles}
-                selectedFile={selectedFile}
-                onSnapshot={handleSnapshot}
-                onRevert={handleRevert}
-                onRestoreCommit={handleRestoreCommit}
-                folder={folder}
-              />
-            </div>
+      <div
+        className={`${styles.layout} ${isSidebarCollapsed ? styles.sidebarCollapsed : ''} ${isPanelCollapsed ? styles.panelCollapsed : ''}`}
+      >
+        <div className={styles.sidebar}>
+          {folder ? (
+            <FileExplorer
+              folder={folder}
+              selectedFile={selectedFile}
+              onSelectFile={setSelectedFile}
+              changedFiles={diffData.changedFiles}
+            />
+          ) : (
+            <div className={styles.emptyPane}>Select a project folder to start.</div>
           )}
         </div>
-      )}
+
+        <button
+          className={styles.collapseRail}
+          onClick={() => setIsSidebarCollapsed(v => !v)}
+          title={isSidebarCollapsed ? 'Show files' : 'Hide files'}
+        >
+          {isSidebarCollapsed ? '▸' : '◂'}
+        </button>
+
+        <div className={styles.center}>
+          <Terminal folder={folder} onOutput={refreshDiff} />
+        </div>
+
+        <button
+          className={styles.collapseRail}
+          onClick={() => setIsPanelCollapsed(v => !v)}
+          title={isPanelCollapsed ? 'Show versioning' : 'Hide versioning'}
+        >
+          {isPanelCollapsed ? '◂' : '▸'}
+        </button>
+
+        <div className={styles.panel}>
+          {folder ? (
+            <DiffViewer
+              diff={diffData.diff}
+              changedFiles={diffData.changedFiles}
+              selectedFile={selectedFile}
+              onSnapshot={handleSnapshot}
+              onRevert={handleRevert}
+              onRestoreCommit={handleRestoreCommit}
+              folder={folder}
+            />
+          ) : (
+            <div className={styles.emptyPane}>Versioning panel appears after folder selection.</div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

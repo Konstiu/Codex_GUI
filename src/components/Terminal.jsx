@@ -26,7 +26,7 @@ export default function Terminal({ folder, onOutput }) {
     if (codexStartTimerRef.current) clearTimeout(codexStartTimerRef.current)
     codexMissingAnnouncedRef.current = false
     syncCodexState('starting')
-    xtermRef.current?.writeln('\x1b[38;5;245m# Starte codex…\x1b[0m')
+    xtermRef.current?.writeln('\x1b[38;5;245m# Starting codex…\x1b[0m')
     window.api.ptyWrite('codex\r')
 
     // If no immediate shell error appears, assume codex started.
@@ -119,7 +119,7 @@ export default function Terminal({ folder, onOutput }) {
       term.writeln('\x1b[38;5;99m║         Codex GUI — Terminal          ║\x1b[0m')
       term.writeln('\x1b[38;5;99m╚═══════════════════════════════════════╝\x1b[0m')
       term.writeln('')
-      term.writeln('\x1b[38;5;245mBereit. Klicke "Codex starten" um direkt loszulegen.\x1b[0m')
+      term.writeln('\x1b[38;5;245mReady. Click "Start Codex" to begin.\x1b[0m')
       term.writeln('')
     }
 
@@ -160,8 +160,8 @@ export default function Terminal({ folder, onOutput }) {
       const missingCodexRegex = /(command not found:\s*codex|codex: command not found|not recognized as an internal or external command)/i
       if (missingCodexRegex.test(data)) {
         if (!codexMissingAnnouncedRef.current) {
-          xtermRef.current?.writeln('\r\n\x1b[31m[Fehler] Codex ist nicht installiert oder nicht im PATH.\x1b[0m')
-          xtermRef.current?.writeln('\x1b[38;5;245mInstalliere z.B. mit: npm install -g @openai/codex\x1b[0m')
+          xtermRef.current?.writeln('\r\n\x1b[31m[Error] Codex is not installed or not in PATH.\x1b[0m')
+          xtermRef.current?.writeln('\x1b[38;5;245mInstall with: npm install -g @openai/codex\x1b[0m')
           codexMissingAnnouncedRef.current = true
         }
         if (codexStartTimerRef.current) {
@@ -199,7 +199,7 @@ export default function Terminal({ folder, onOutput }) {
         codexStartTimerRef.current = null
       }
       syncCodexState('idle')
-      xtermRef.current?.writeln('\r\n\x1b[38;5;245m[Shell beendet]\x1b[0m')
+      xtermRef.current?.writeln('\r\n\x1b[38;5;245m[Shell exited]\x1b[0m')
       window.api.offPtyData()
       window.api.offPtyExit()
     })
@@ -209,7 +209,7 @@ export default function Terminal({ folder, onOutput }) {
       isRunningRef.current = false
       setIsRunning(false)
       syncCodexState('idle')
-      xtermRef.current?.writeln(`\x1b[31mFehler: ${result.error}\x1b[0m`)
+      xtermRef.current?.writeln(`\x1b[31mError: ${result.error}\x1b[0m`)
       window.api.offPtyData()
       window.api.offPtyExit()
       return
@@ -244,6 +244,36 @@ export default function Terminal({ folder, onOutput }) {
     window.api.offPtyExit()
   }, [syncCodexState])
 
+  const stopCodex = useCallback(() => {
+    if (!isRunningRef.current) return
+    if (codexStateRef.current === 'running' || codexStateRef.current === 'starting') {
+      // Ctrl+C: stop Codex but keep shell alive.
+      window.api.ptyWrite('\x03')
+      if (codexStartTimerRef.current) {
+        clearTimeout(codexStartTimerRef.current)
+        codexStartTimerRef.current = null
+      }
+      syncCodexState('stopped')
+      return
+    }
+    // If Codex is already stopped/missing, this acts as shell stop.
+    stopTerminal()
+  }, [stopTerminal, syncCodexState])
+
+  const resumeCodex = useCallback(() => {
+    if (!isRunningRef.current) return
+    if (codexStateRef.current === 'running' || codexStateRef.current === 'starting') return
+    codexMissingAnnouncedRef.current = false
+    syncCodexState('starting')
+    xtermRef.current?.writeln('\x1b[38;5;245m# Resuming codex session…\x1b[0m')
+    window.api.ptyWrite('codex resume\r')
+    if (codexStartTimerRef.current) clearTimeout(codexStartTimerRef.current)
+    codexStartTimerRef.current = setTimeout(() => {
+      if (codexStateRef.current === 'starting') syncCodexState('running')
+      codexStartTimerRef.current = null
+    }, 1200)
+  }, [syncCodexState])
+
   const restartCodex = useCallback(async () => {
     if (isRunningRef.current) {
       await stopTerminal()
@@ -260,31 +290,17 @@ export default function Terminal({ folder, onOutput }) {
   }, [focusTerminal])
 
   const runCodex = useCallback(() => {
+    if (codexState === 'running' || codexState === 'starting') return
     if (isRunning) {
       launchCodex()
       return
     }
     startTerminal({ autoRunCodex: true })
-  }, [isRunning, startTerminal, launchCodex])
+  }, [isRunning, codexState, startTerminal, launchCodex])
 
   return (
     <div className={styles.wrapper}>
       <div className={styles.toolbar}>
-        <div className={styles.toolbarLeft}>
-          <div className={`${styles.statusIndicator} ${isRunning ? styles.statusOn : ''}`} />
-          <span className={styles.toolbarLabel}>
-            {!isRunning
-              ? 'Shell inaktiv'
-              : codexState === 'running'
-                ? 'Shell aktiv · Codex läuft'
-                : codexState === 'starting'
-                  ? 'Shell aktiv · Codex startet…'
-                  : codexState === 'missing'
-                    ? 'Shell aktiv · Codex fehlt'
-                    : 'Shell aktiv · Codex gestoppt'}
-          </span>
-        </div>
-
         <div className={styles.toolbarRight}>
           {!isRunning ? (
             <>
@@ -293,7 +309,7 @@ export default function Terminal({ folder, onOutput }) {
                 onClick={runCodex}
                 disabled={!isReady}
               >
-                🤖 Codex starten
+                🤖 Start Codex
               </button>
             </>
           ) : (
@@ -301,28 +317,37 @@ export default function Terminal({ folder, onOutput }) {
               <button
                 className={`${styles.btn} ${styles.btnCodex}`}
                 onClick={runCodex}
+                disabled={codexState === 'running' || codexState === 'starting'}
               >
-                🤖 Codex starten
+                {codexState === 'running' || codexState === 'starting' ? '🤖 Codex running' : '🤖 Start Codex'}
               </button>
-              {codexState !== 'running' && (
+              {codexState !== 'running' && codexState !== 'starting' && (
+                <button
+                  className={`${styles.btn} ${styles.btnRestart}`}
+                  onClick={resumeCodex}
+                >
+                  ↻ Resume
+                </button>
+              )}
+              {codexState !== 'running' && codexState !== 'starting' && (
                 <button
                   className={`${styles.btn} ${styles.btnRestart}`}
                   onClick={restartCodex}
                 >
-                  ↻ Neustart
+                  ↻ Restart
                 </button>
               )}
               <button
                 className={`${styles.btn} ${styles.btnSecondary}`}
                 onClick={clearTerminal}
               >
-                Leeren
+                Clear
               </button>
               <button
                 className={`${styles.btn} ${styles.btnDanger}`}
-                onClick={stopTerminal}
+                onClick={stopCodex}
               >
-                ■ Stop
+                {codexState === 'running' || codexState === 'starting' ? '■ Stop Codex' : '■ Stop Shell'}
               </button>
             </>
           )}

@@ -25,7 +25,7 @@ export default function Titlebar({ folder, gitState, onOpenFolder, onEnableVersi
                   }`}
                 >
                   {gitState.mode === 'missing'
-                    ? 'kein git'
+                    ? 'no git'
                     : gitState.mode === 'new'
                       ? 'snapshot'
                       : `git · ${gitState.branch || 'main'}`}
@@ -49,11 +49,11 @@ export default function Titlebar({ folder, gitState, onOpenFolder, onEnableVersi
         <div className={styles.right}>
           {folder && gitState?.mode === 'missing' && (
             <button className={styles.versionBtn} onClick={onEnableVersioning}>
-              Versionierung aktivieren
+              Enable versioning
             </button>
           )}
           <button className={styles.openBtn} onClick={onOpenFolder}>
-            {folder ? 'Anderer Ordner' : 'Ordner öffnen'}
+            {folder ? 'Switch folder' : 'Open folder'}
           </button>
         </div>
       </div>

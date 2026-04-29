@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import styles from './FileExplorer.module.css'
 
 function getFileIcon(name, isDirectory) {
-  if (isDirectory) return '▸'
+  if (isDirectory) return 'FOLDER'
   const ext = name.split('.').pop()?.toLowerCase()
   const icons = {
     js: 'JS', jsx: 'JS', ts: 'TS', tsx: 'TS',
@@ -10,7 +10,7 @@ function getFileIcon(name, isDirectory) {
     html: 'HT', css: 'CS', scss: 'SC',
     json: '{}', md: 'MD', txt: 'TX',
     sh: 'SH', yaml: 'YL', yml: 'YL',
-    png: '▣', jpg: '▣', svg: '▣', gif: '▣',
+    png: '▣', jpg: '▣', jpeg: '▣', svg: '▣', gif: '▣',
   }
   return icons[ext] || '·'
 }
@@ -50,8 +50,11 @@ function FileNode({ node, depth, selectedFile, onSelectFile, changedPaths }) {
         style={{ paddingLeft: `${12 + depth * 14}px` }}
         onClick={handleClick}
       >
-        <span className={styles.icon} style={{ color }}>
-          {node.isDirectory ? (expanded ? '▾' : '▸') : iconText}
+        <span className={`${styles.chevron} ${node.isDirectory ? styles.chevronVisible : ''}`}>
+          {node.isDirectory ? (expanded ? '▾' : '▸') : ''}
+        </span>
+        <span className={`${styles.icon} ${node.isDirectory ? styles.folderIcon : ''}`} style={{ color }}>
+          {node.isDirectory ? (expanded ? '📂' : '📁') : iconText}
         </span>
         <span className={styles.name}>{node.name}</span>
         {isChanged && <span className={styles.changeDot} />}
@@ -104,24 +107,24 @@ export default function FileExplorer({ folder, selectedFile, onSelectFile, chang
   return (
     <div className={styles.explorer}>
       <div className={styles.header}>
-        <span className={styles.headerLabel}>Dateien</span>
+        <span className={styles.headerLabel}>Files</span>
         <button
           className={styles.refreshBtn}
           onClick={() => window.api.readDir(folder).then(setTree)}
-          title="Aktualisieren"
+          title="Refresh"
         >
           ↻
         </button>
       </div>
 
       <div className={styles.folderRoot}>
-        <span className={styles.rootIcon}>⬡</span>
+        <span className={styles.rootIcon}>◈</span>
         <span className={styles.rootName}>{folderName}</span>
       </div>
 
       <div className={styles.tree}>
         {loading ? (
-          <div className={styles.loading}>Lade Dateien…</div>
+          <div className={styles.loading}>Loading files…</div>
         ) : (
           tree.map(node => (
             <FileNode

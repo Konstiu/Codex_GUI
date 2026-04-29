@@ -9,9 +9,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--bg-surface);
 }
 
 .headerLabel {
@@ -23,26 +26,30 @@
 }
 
 .refreshBtn {
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 2px 4px;
-  border-radius: 3px;
-  transition: color 0.15s;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border-mid);
+  transition: all 0.15s;
   line-height: 1;
 }
 
 .refreshBtn:hover {
-  color: var(--text-secondary);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .folderRoot {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .rootIcon {
@@ -74,12 +81,12 @@
 .node {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 12px;
+  gap: 7px;
+  padding: 4px 12px;
   cursor: pointer;
   border-radius: 0;
-  transition: background 0.1s;
-  min-height: 24px;
+  transition: background 0.12s;
+  min-height: 26px;
 }
 
 .node:hover {
@@ -87,19 +94,48 @@
 }
 
 .selected {
-  background: rgba(124, 110, 248, 0.12) !important;
+  background: rgba(124, 110, 248, 0.14) !important;
 }
 
 .changed {
   /* subtle tint for changed files */
 }
 
+.chevron {
+  width: 14px;
+  min-width: 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.chevronVisible {
+  opacity: 1;
+}
+
 .icon {
-  font-size: 10px;
+  font-size: 9px;
   font-family: var(--font-mono);
-  min-width: 16px;
+  min-width: 30px;
   text-align: center;
   flex-shrink: 0;
+  padding: 2px 5px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  letter-spacing: 0.02em;
+}
+
+.folderIcon {
+  font-size: 14px;
+  font-family: var(--font-ui);
+  padding: 0;
+  border: none;
+  background: transparent;
+  min-width: 20px;
 }
 
 .name {
@@ -118,6 +154,7 @@
 
 .selected .name {
   color: var(--text-primary);
+  font-weight: 500;
 }
 
 .changeDot {
